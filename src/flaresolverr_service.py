@@ -2,12 +2,13 @@ import logging
 import sys
 import time
 from time import sleep
+from typing import Optional
 import random
 from urllib.parse import unquote
 from uuid import uuid1
 
 from func_timeout import func_timeout, FunctionTimedOut
-from selenium.common import TimeoutException
+from selenium.common import TimeoutException, NoSuchElementException, InvalidCookieDomainException, WebDriverException
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
@@ -269,6 +270,8 @@ def click_verify(driver: WebDriver):
     time.sleep(2)
 
 def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> ChallengeResolutionT:
+    _add_cookies(driver, req.url, req.cookies)
+
     res = ChallengeResolutionT({})
     res.status = STATUS_OK
     res.message = ""
@@ -371,6 +374,23 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
 
     res.result = challenge_res
     return res
+def _add_cookies(driver: WebDriver, url: str, cookies: Optional[list]):
+    if cookies is None:
+        return
+
+    # Enables network tracking so we may use Network.setCookie method
+    driver.execute_cdp_cmd('Network.enable', {})
+
+    try:
+        for cookie in cookies:
+            driver.execute_cdp_cmd('Network.setCookie', cookie)
+    except WebDriverException as e:
+        logging.error("Failed to add cookies %s" % e)
+        raise Exception("Failed to add cookies: %s" % e.msg)
+    finally:
+        # Disable network tracking
+        driver.execute_cdp_cmd('Network.disable', {})
+
 
 def _try_solve_perimeterx_captcha_mouse_movement(driver: WebDriver, retry=3):
     '''
